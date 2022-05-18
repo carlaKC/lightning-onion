@@ -1,6 +1,7 @@
 package sphinx
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -133,4 +134,28 @@ func encryptHopData(sharedSecret *Hash256, payload []byte) ([]byte, error) {
 	}
 
 	return cipher.Seal(payload[:0], blindingNonce[:], payload, nil), nil
+}
+
+func decryptHopData(nodeKey SingleKeyECDH, ephemeralKey *btcec.PublicKey,
+	payload []byte) ([]byte, error) {
+
+	sharedSecretBytes, err := nodeKey.ECDH(ephemeralKey)
+	if err != nil {
+		return nil, err
+	}
+
+	var sharedSecret Hash256
+	if n := copy(sharedSecret[:], sharedSecretBytes[:]); n != sha256.Size {
+		return nil, fmt.Errorf("expected %v byte secret, got: %v",
+			sha256.Size, n)
+	}
+
+	rhoKey := generateKey("rho", &sharedSecret)
+
+	cipher, err := chacha20poly1305.New(rhoKey[:])
+	if err != nil {
+		return nil, err
+	}
+
+	return cipher.Open(payload[:0], blindingNonce[:], payload, nil)
 }

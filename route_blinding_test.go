@@ -14,6 +14,8 @@ const (
 
 	bobNodeIDStr = "0324653eac434488002cc06bbfb7f10fe18991e35f9fe4302dbea6d2353dc0ab1c"
 
+	bobPrivkeyStr = "4242424242424242424242424242424242424242424242424242424242424242"
+
 	bobTLVStr = "0110000000000000000000000000000000000208000000000000002a0421027f31ebc5462c1fdce1b737ecff52d37d75dea43ce11c74d25aa297165faa2007fdfde903123456"
 
 	bobEphPrivStr = "0202020202020202020202020202020202020202020202020202020202020202"
@@ -153,4 +155,69 @@ func testBlindedIDAndPayload(t *testing.T, route []*btcec.PublicKey,
 		require.Equal(t, expectedRoute.Hops[i], blindedRoute.Hops[i],
 			fmt.Sprintf("hop: %v", i))
 	}
+}
+
+// TestDecryptBlindedRoute tests decryption of encoded data blobs provided in
+// blinded routes, and calculation of the next ephemeral pubkey to be passed to
+// the next node in the blinded route.
+func TestDecryptBlindedRoute(t *testing.T) {
+	bobPrivKeyBytes, err := hex.DecodeString(bobPrivkeyStr)
+	require.NoError(t, err, "bob priv hex")
+
+	bobPrivKey, _ := btcec.PrivKeyFromBytes(bobPrivKeyBytes)
+
+	bobEmphemeralPubBytes, err := hex.DecodeString(bobEphPubStr)
+	require.NoError(t, err, "bob ephemeral pub hex")
+
+	bobEphemeralPubKey, err := btcec.ParsePubKey(bobEmphemeralPubBytes)
+	require.NoError(t, err, "bob ephemeral pub")
+
+	bobEncryptedDataBytes, err := hex.DecodeString(bobEncDataStr)
+	require.NoError(t, err, "bob encrypted data")
+
+	bobPayload, err := hex.DecodeString(bobTLVStr)
+	require.NoError(t, err, "bob TLVs")
+
+	tests := []struct {
+		name          string
+		nodeKey       *btcec.PrivateKey
+		ephemeralKey  *btcec.PublicKey
+		encryptedData []byte
+
+		expectedData     []byte
+		nextEphemeralKey *btcec.PublicKey
+	}{
+		{
+			name:          "bob decrypt tlvs, get carol's next pubkey",
+			nodeKey:       bobPrivKey,
+			ephemeralKey:  bobEphemeralPubKey,
+			encryptedData: bobEncryptedDataBytes,
+
+			expectedData: bobPayload,
+			// TODO - carla: derive next ephemeral pubkey
+		},
+	}
+
+	for _, testCase := range tests {
+		testCase := testCase
+
+		t.Run(testCase.name, func(t *testing.T) {
+			testDecryptBlindedRoute(
+				t, testCase.nodeKey, testCase.ephemeralKey,
+				testCase.encryptedData, testCase.expectedData,
+			)
+		})
+	}
+}
+
+func testDecryptBlindedRoute(t *testing.T, privkey *btcec.PrivateKey,
+	ephemeralKey *btcec.PublicKey, payload, expected []byte) {
+
+	privkeyECDH := &PrivKeyECDH{
+		PrivKey: privkey,
+	}
+
+	decrypted, err := decryptHopData(privkeyECDH, ephemeralKey, payload)
+	require.NoError(t, err, "decrypt failed")
+	require.Equal(t, expected, decrypted, "payload wrong")
 }
