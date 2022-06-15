@@ -37,6 +37,12 @@ type SingleKeyECDH interface {
 	// returned will be the sha256 of the resulting shared point serialized
 	// in compressed format.
 	ECDH(pubKey *btcec.PublicKey) ([32]byte, error)
+
+	// Mul performs scalar multiplication between the abstracted private
+	// key and the scalar provided.
+	//
+	// TODO(carla): is this safe?
+	Mul(val *btcec.ModNScalar) *btcec.ModNScalar
 }
 
 // PrivKeyECDH is an implementation of the SingleKeyECDH in which we do have the
@@ -76,6 +82,11 @@ func (p *PrivKeyECDH) ECDH(pub *btcec.PublicKey) ([32]byte, error) {
 	ecdhPubKey := btcec.NewPublicKey(&ecdhPoint.X, &ecdhPoint.Y)
 
 	return sha256.Sum256(ecdhPubKey.SerializeCompressed()), nil
+}
+
+// Mul performs scalar multiplication p * val.
+func (p *PrivKeyECDH) Mul(val *btcec.ModNScalar) *btcec.ModNScalar {
+	return p.PrivKey.Key.Mul(val)
 }
 
 // DecryptedError contains the decrypted error message and its sender.
