@@ -479,6 +479,12 @@ type ProcessedPacket struct {
 	// the new set of forwarding instructions.
 	Payload HopPayload
 
+	// DecryptBlob is a closure that can be used to decrypt encrypted data
+	// that was included in a blinded route. If this closure is nil, then
+	// the outer onion did not contain the blinding key required to decrypt
+	// this data.
+	DecryptBlob BlobDecrypt
+
 	// NextPacket is the onion packet that should be forwarded to the next
 	// hop as denoted by the ForwardingInstructions field.
 	//
@@ -681,15 +687,38 @@ func processOnionPacket(onionPkt *OnionPacket, sharedSecret *Hash256,
 		return nil, err
 	}
 
-	// Finally, we'll return a fully processed packet with the outer most
-	// hop data (where the primary forwarding instructions lie) and the
-	// inner most onion packet that we unwrapped.
-	return &ProcessedPacket{
+	// Create a fully processed packet with the outer most hop data (where
+	// the primary forwarding instructions lie) and the inner most onion
+	// packet that we unwrapped.
+	processedPacket := &ProcessedPacket{
 		Action:                 action,
 		ForwardingInstructions: hopData,
 		Payload:                *outerHopPayload,
 		NextPacket:             innerPkt,
-	}, nil
+	}
+
+	// If we don't have a blinding key in our outer onion, we can just
+	// return the processed packet as is.
+	if onionPkt.BlindingKey == nil {
+		return processedPacket, nil
+	}
+
+	// If we have a blinding key, we want to include a closure in our
+	// processed packet that can be used to decrypt accompanying encrypted
+	// data.
+	processedPacket.DecryptBlob = newBlobDecrypter(sharedSecret)
+
+	// Calculate the next blinding ephemeral key for the next onion and
+	// include it as well.
+	blindingFactor := computeBlindingFactor(
+		onionPkt.BlindingKey, sharedSecret[:],
+	)
+
+	innerPkt.BlindingKey = blindGroupElement(
+		onionPkt.BlindingKey, blindingFactor,
+	)
+
+	return processedPacket, nil
 }
 
 // Tx is a transaction consisting of a number of sphinx packets to be atomically
