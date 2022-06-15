@@ -21,6 +21,11 @@ var (
 	ErrInvalidOnionKey = fmt.Errorf("invalid onion key: pubkey isn't on " +
 		"secp256k1 curve")
 
+	// ErrInvalidBlindingKey is returned during onion parsing process, when
+	// blinding key is invalid.
+	ErrInvalidBlindingKey = fmt.Errorf("invalid blinding key: pubkey " +
+		"isn't on secp256k1 curve")
+
 	// ErrLogEntryNotFound is an error returned when a packet lookup in a replay
 	// log fails because it is missing.
 	ErrLogEntryNotFound = fmt.Errorf("sphinx packet is not in log")

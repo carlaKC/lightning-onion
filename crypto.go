@@ -217,11 +217,13 @@ func blindBaseElement(blindingFactor btcec.ModNScalar) *btcec.PublicKey {
 type sharedSecretGenerator interface {
 	// generateSharedSecret given a public key, generates a shared secret
 	// using private data of the underlying sharedSecretGenerator.
-	generateSharedSecret(dhKey *btcec.PublicKey) (Hash256, error)
+	generateSharedSecret(dhKey, blindingKey *btcec.PublicKey) (Hash256, error)
 }
 
 // generateSharedSecret generates the shared secret by given ephemeral key.
-func (r *Router) generateSharedSecret(dhKey *btcec.PublicKey) (Hash256, error) {
+func (r *Router) generateSharedSecret(dhKey, blindingKey *btcec.PublicKey) (
+	Hash256, error) {
+
 	var sharedSecret Hash256
 
 	// Ensure that the public key is on our curve.
@@ -229,8 +231,43 @@ func (r *Router) generateSharedSecret(dhKey *btcec.PublicKey) (Hash256, error) {
 		return sharedSecret, ErrInvalidOnionKey
 	}
 
-	// Compute our shared secret.
-	return r.onionKey.ECDH(dhKey)
+	// If no blinding key is provided, compute our shared secret as usual
+	// and return it.
+	if blindingKey == nil {
+		return r.onionKey.ECDH(dhKey)
+	}
+
+	// Ensure that the blinding key is on our curve.
+	if !blindingKey.IsOnCurve() {
+		return sharedSecret, ErrInvalidBlindingKey
+	}
+
+	// Computed blinding secret from onion key and blinding pubkey:
+	// ss(i) = SHA256(k(i) * E(i))
+	blindingSecretBytes, err := r.onionKey.ECDH(blindingKey)
+	if err != nil {
+		return sharedSecret, nil
+	}
+
+	var blindingSecret Hash256
+	copy(blindingSecret[:], blindingSecretBytes[:])
+
+	// HMAC256("blinded_node_id", ss(i))
+	blindingFactor := generateKey("blinded_node_id", &blindingSecret)
+
+	blindingScalar := &btcec.ModNScalar{}
+	blindingScalar.SetByteSlice(blindingFactor[:])
+
+	// b(i) = HMAC256("blinded_node_id", ss(i)) * k(i)
+	blindingPrivKeyBytes := r.onionKey.Mul(blindingScalar).Bytes()
+	blindingPrivKey, _ := btcec.PrivKeyFromBytes(blindingPrivKeyBytes[:])
+
+	// b(i).ECDH(dhKey)
+	blindingECDH := &PrivKeyECDH{
+		PrivKey: blindingPrivKey,
+	}
+
+	return blindingECDH.ECDH(dhKey)
 }
 
 // onionEncrypt obfuscates the data with compliance with BOLT#4. As we use a
