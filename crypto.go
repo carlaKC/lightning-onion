@@ -240,17 +240,51 @@ type sharedSecretGenerator interface {
 	generateSharedSecret(dhKey *btcec.PublicKey) (Hash256, error)
 }
 
-// generateSharedSecret generates the shared secret by given ephemeral key.
-func (r *Router) generateSharedSecret(dhKey *btcec.PublicKey) (Hash256, error) {
+// generateSharedSecret generates the shared secret using the given ephemeral
+// pub key and the Router's private key. If a blindingPoint is provided then it
+// is used to tweak the Router's private key before creating the shared secret
+// with the ephemeral pub key.
+func (r *Router) generateSharedSecret(dhKey *btcec.PublicKey,
+	blindingPoint *btcec.PublicKey) (Hash256, error) {
+
+	// If no blinding point is provided, then the un-tweaked dhKey can
+	// be used to derive the shared secret
+	if blindingPoint == nil {
+		return sharedSecret(r.onionKey, dhKey)
+	}
+
+	// We use the blinding point to calculate the blinding factor that the
+	// receiver used with us so that we can use it to tweak our priv key.
+	// The sender would have created their shared secret with our blinded
+	// pub key.
+	ssReceiver, err := sharedSecret(r.onionKey, blindingPoint)
+	if err != nil {
+		return Hash256{}, err
+	}
+
+	blindingFactorBytes := generateKey(routeBlindingHMACKey, &ssReceiver)
+	var blindingFactor btcec.ModNScalar
+	blindingFactor.SetBytes(&blindingFactorBytes)
+
+	// Note that here we tweak the ephemeral pub key with the blinding
+	// factor instead of the Router's private key. Since ECDH is just
+	// multiplication, this achieves the same result.
+	ephemeral := blindGroupElement(dhKey, blindingFactor)
+	return sharedSecret(r.onionKey, ephemeral)
+}
+
+// sharedSecret does a ECDH operation on the passed private and public keys and
+// returns the result.
+func sharedSecret(priv SingleKeyECDH, pub *btcec.PublicKey) (Hash256, error) {
 	var sharedSecret Hash256
 
 	// Ensure that the public key is on our curve.
-	if !dhKey.IsOnCurve() {
+	if !pub.IsOnCurve() {
 		return sharedSecret, ErrInvalidOnionKey
 	}
 
-	// Compute our shared secret.
-	return r.onionKey.ECDH(dhKey)
+	// Compute the shared secret.
+	return priv.ECDH(pub)
 }
 
 // onionEncrypt obfuscates the data with compliance with BOLT#4. As we use a

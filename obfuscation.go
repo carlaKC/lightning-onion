@@ -15,10 +15,12 @@ type OnionErrorEncrypter struct {
 // NewOnionErrorEncrypter creates new instance of the onion encrypter backed by
 // the passed router, with encryption to be doing using the passed
 // ephemeralKey.
-func NewOnionErrorEncrypter(router *Router,
-	ephemeralKey *btcec.PublicKey) (*OnionErrorEncrypter, error) {
+func NewOnionErrorEncrypter(router *Router, ephemeralKey,
+	blindingPoint *btcec.PublicKey) (*OnionErrorEncrypter, error) {
 
-	sharedSecret, err := router.generateSharedSecret(ephemeralKey)
+	sharedSecret, err := router.generateSharedSecret(
+		ephemeralKey, blindingPoint,
+	)
 	if err != nil {
 		return nil, err
 	}
