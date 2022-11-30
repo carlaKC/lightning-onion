@@ -114,10 +114,10 @@ func (r *Router) DecryptBlindedData(ephemPub *btcec.PublicKey,
 
 // NextEphemeral computes the next ephemeral key given the current ephemeral
 // key and this node's private key.
-func NextEphemeral(privKey SingleKeyECDH,
-	ephemPub *btcec.PublicKey) (*btcec.PublicKey, error) {
+func (r *Router) NextEphemeral(ephemPub *btcec.PublicKey) (*btcec.PublicKey,
+	error) {
 
-	ss, err := privKey.ECDH(ephemPub)
+	ss, err := r.onionKey.ECDH(ephemPub)
 	if err != nil {
 		return nil, err
 	}
