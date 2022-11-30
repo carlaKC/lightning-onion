@@ -99,10 +99,10 @@ func BuildBlindedPath(sessionKey *btcec.PrivateKey,
 
 // DecryptBlindedData decrypts the data encrypted by the creator of the blinded
 // route.
-func DecryptBlindedData(privKey SingleKeyECDH, ephemPub *btcec.PublicKey,
+func (r *Router) DecryptBlindedData(ephemPub *btcec.PublicKey,
 	encryptedData []byte) ([]byte, error) {
 
-	ss, err := privKey.ECDH(ephemPub)
+	ss, err := r.onionKey.ECDH(ephemPub)
 	if err != nil {
 		return nil, err
 	}
