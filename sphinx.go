@@ -581,6 +581,14 @@ func (r *Router) ReconstructOnionPacket(onionPkt *OnionPacket, assocData []byte,
 	return processOnionPacket(onionPkt, &sharedSecret, assocData)
 }
 
+// DecryptBlindedData uses the router's private key to decrypt data encrypted by
+// the creator of the blinded route.
+func (r *Router) DecryptBlindedData(ephemPub *btcec.PublicKey,
+	encryptedData []byte) ([]byte, error) {
+
+	return DecryptBlindedData(r.onionKey, ephemPub, encryptedData)
+}
+
 // unwrapPacket wraps a layer of the passed onion packet using the specified
 // shared secret and associated data. The associated data will be used to check
 // the HMAC at each hop to ensure the same data is passed along with the onion
